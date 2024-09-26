@@ -67,8 +67,7 @@ class Network(object):
 
         return output
 
-    def SGD(self, training_data, epochs, mini_batch_size, eta,
-            test_data=None):
+    def SGD(self, training_data, epochs, mini_batch_size, eta, lmbda_l1=0.0, lmbda_l2=0.0):
         """
         Обучить нейронную сеть, используя алгоритм стохастического
         (mini-batch) градиентного спуска.
@@ -84,35 +83,30 @@ class Network(object):
         Тестирование полезно для мониторинга процесса обучения,
         но может существенно замедлить работу программы.
         """
-
-        if test_data is not None: n_test = len(test_data)
-        n = len(training_data)
-        success_tests = 0
+        loss_history = []
         for j in range(epochs):
             random.shuffle(training_data)
             mini_batches = [
                 training_data[k:k + mini_batch_size]
-                for k in range(0, n, mini_batch_size)]
+                for k in range(0, len(training_data), mini_batch_size)]
             for mini_batch in mini_batches:
-                self.update_mini_batch(mini_batch, eta)
-            if test_data is not None:
-                success_tests = self.evaluate(test_data)
-                print("Эпоха {0}: {1} / {2}".format(
-                    j, success_tests, n_test))
-            else:
-                print("Эпоха {0} завершена".format(j))
-        if test_data is not None:
-            return success_tests / n_test
+                self.update_mini_batch(mini_batch, eta, lmbda_l1, lmbda_l2)
+            print("Epoch {0} complete".format(j))
+            loss = self.total_loss(training_data, lmbda_l1, lmbda_l2)
+            loss_history.append(loss)
 
-    def update_mini_batch(self, mini_batch, eta):
+        return loss_history
+
+    def update_mini_batch(self, mini_batch, eta, lmbda_l1=0.0, lmbda_l2=0.0):
         """
         Обновить веса и смещения нейронной сети, сделав шаг градиентного
         спуска на основе алгоритма обратного распространения ошибки, примененного
         к одному mini batch.
         ``mini_batch`` - список кортежей вида ``(x, y)``,
-        ``eta`` - величина шага (learning rate).
+        ``eta`` - величина шага (learning rate),
+        ``lmbda_l1`` - коэффициент регуляризации L1,
+        ``lmbda_l2`` - коэффициент регуляризации L2.
         """
-
         nabla_b = [np.zeros(b.shape) for b in self.biases]
         nabla_w = [np.zeros(w.shape) for w in self.weights]
         for x, y in mini_batch:
@@ -121,7 +115,15 @@ class Network(object):
             nabla_w = [nw + dnw for nw, dnw in zip(nabla_w, delta_nabla_w)]
 
         eps = eta / len(mini_batch)
-        self.weights = [w - eps * nw for w, nw in zip(self.weights, nabla_w)]
+        
+        # L1 регуляризация
+        self.weights = [(1 - eps * lmbda_l1) * w - eps * nw 
+                        for w, nw in zip(self.weights, nabla_w)]
+        
+        # L2 регуляризация
+        self.weights = [(1 - eps * lmbda_l2) * w - eps * nw 
+                        for w, nw in zip(self.weights, nabla_w)]
+        
         self.biases = [b - eps * nb for b, nb in zip(self.biases, nabla_b)]
 
     def backprop(self, x, y):
@@ -158,7 +160,7 @@ class Network(object):
         # Обратите внимание, что переменная l в цикле ниже используется
         # немного иначе, чем в лекциях.  Здесь l = 1 означает последний слой,
         # l = 2 - предпоследний и так далее.
-        # Мы перенумеровали схему, чтобы с удобством для себя
+        # Мы перенумеровали схему, чтобы с удобства для себя
         # использовать тот факт, что в Python к переменной типа list
         # можно обращаться по негативному индексу.
         for l in range(2, self.num_layers):
@@ -186,3 +188,23 @@ class Network(object):
         целевой функции по активациям выходного слоя.
         """
         return output_activations - y
+
+    def total_loss(self, training_data, lmbda_l1=0.0, lmbda_l2=0.0):
+        """
+        Вычислить общую ошибку на обучающих данных с учетом регуляризации.
+        ``training_data`` - список кортежей вида ``(x, y)``,
+        ``lmbda_l1`` - коэффициент регуляризации L1,
+        ``lmbda_l2`` - коэффициент регуляризации L2.
+        """
+        loss = 0.0
+        for x, y in training_data:
+            output = self.feedforward(x)
+            loss += 0.5 * np.sum((output - y) ** 2)
+        
+        # L1 регуляризация
+        loss += lmbda_l1 * sum(np.sum(np.abs(w)) for w in self.weights)
+        
+        # L2 регуляризация
+        loss += 0.5 * lmbda_l2 * sum(np.sum(np.square(w)) for w in self.weights)
+        
+        return loss / len(training_data)
