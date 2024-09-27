@@ -84,7 +84,7 @@ class SimpleCarAgent(Agent):
 
     @classmethod
     def from_string(cls, s):
-        from numpy import array  # это важный импорт, без него не пройдёт нормально eval
+        from numpy import array  # это важный импорт, без которого не пройдёт нормально eval
         layers, weights, biases = eval(s.replace("\n", ""), locals())
         return cls.from_weights(layers, weights, biases)
 
@@ -152,7 +152,7 @@ class SimpleCarAgent(Agent):
 
         return best_action
 
-    def receive_feedback(self, reward, train_every=10, reward_depth=25):
+    def receive_feedback(self, reward, train_every=20, reward_depth=25):
         """
         Получить реакцию на последнее решение, принятое сетью, и проанализировать его
         :param reward: оценка внешним миром наших действий
@@ -173,6 +173,10 @@ class SimpleCarAgent(Agent):
             reward *= 0.5
             i -= 1
 
+        # Добавляем награду, если машина не врезалась в стены последние reward_depth//2 шагов
+        if all(r >= 0 for r in list(self.reward_history)[-reward_depth // 2:]):
+            self.reward_history[-1] += 1  # Добавляем положительную награду
+
         # Если у нас накопилось хоть чуть-чуть данных, давайте потренируем нейросеть
         # прежде чем собирать новые данные
         # (проверьте, что вы в принципе храните достаточно данных (параметр `history_data` в `__init__`),
@@ -183,8 +187,8 @@ class SimpleCarAgent(Agent):
 
             # Преобразуем данные в нужный формат
             train_data = [(x.reshape(-1, 1), np.array([y])) for x, y in zip(X_train, y_train)]
-            loss_history = self.neural_net.SGD(training_data=train_data, epochs=2, mini_batch_size=8, eta=0.01,
-                                               lmbda_l1=0.001, lmbda_l2=0.01)
+            loss_history = self.neural_net.SGD(training_data=train_data, epochs=10, mini_batch_size=32, eta=0.005,
+                                               lmbda_l1=0.0005, lmbda_l2=0.005)
             self.loss_history.extend(loss_history)
             self.update_plots = True
 
@@ -205,6 +209,9 @@ class SimpleCarAgent(Agent):
         
         # Корректируем размер шкалы в соответствии с текущими значениями
         ax_recent.set_ylim(min(recent_loss) - 0.1, max(recent_loss) + 0.1)
+
+    def get_training_params(self):
+        return self.neural_net.get_training_params()
 
 def output_function(z):
     return z

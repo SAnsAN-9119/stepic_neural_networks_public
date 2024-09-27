@@ -54,6 +54,12 @@ class Network(object):
         assert output_derivative is not None, "You should either provide derivative of the output function or leave it default!"
         self.output_derivative = output_derivative
 
+        self.epochs = None
+        self.mini_batch_size = None
+        self.eta = None
+        self.lmbda_l1 = None
+        self.lmbda_l2 = None
+
     def feedforward(self, a):
         """
         Вычислить и вернуть выходную активацию нейронной сети
@@ -83,6 +89,13 @@ class Network(object):
         Тестирование полезно для мониторинга процесса обучения,
         но может существенно замедлить работу программы.
         """
+        # Сохраняем параметры обучения как атрибуты класса
+        self.epochs = epochs
+        self.mini_batch_size = mini_batch_size
+        self.eta = eta
+        self.lmbda_l1 = lmbda_l1
+        self.lmbda_l2 = lmbda_l2
+        
         loss_history = []
         for j in range(epochs):
             random.shuffle(training_data)
@@ -208,3 +221,12 @@ class Network(object):
         loss += 0.5 * lmbda_l2 * sum(np.sum(np.square(w)) for w in self.weights)
         
         return loss / len(training_data)
+
+    def get_training_params(self):
+        return {
+            "epochs": self.epochs,
+            "mini_batch_size": self.mini_batch_size,
+            "eta": self.eta,
+            "lmbda_l1": self.lmbda_l1,
+            "lmbda_l2": self.lmbda_l2
+        }

@@ -31,7 +31,7 @@ class World(metaclass=ABCMeta):
 
 class SimpleCarWorld(World):
     COLLISION_PENALTY = 32 * 1e0  # штраф за столкновение со стеной
-    BEST_WAY_REWARD = 0 * 1e-1  # награда за движение по лучшему лучу
+    BEST_WAY_REWARD = 5 * 1e-1  # награда за движение по лучшему лучу
     HEADING_REWARD = 0 * 1e-1  # награда за движение в правильном направлении
     WRONG_HEADING_PENALTY = 0 * 1e0  # штраф за движение в неправильном направлении
     IDLENESS_PENALTY = 32 * 1e-1  # штраф за бездействие (недвижение)
@@ -39,6 +39,7 @@ class SimpleCarWorld(World):
     MIN_SPEED = 0.1 * 1e0  # минимальная скорость, необходимая для избежания штрафа за холостой ход
     MAX_SPEED = 10 * 1e0  # максимальная скорость, разрешенная во избежание штрафа за превышение скорости
     SPEEDING_REWARD = 5 * 1e0
+    COLLISION_REWARD = 1 * 1e0  # награда за отсутствие столкновений
 
     size = (800, 600)
 
@@ -128,9 +129,14 @@ class SimpleCarWorld(World):
         heading_angle = angle(-state.position, state.heading)
         max_ray_angle = (max_ray_index - agent.rays // 2) * (np.pi / (agent.rays - 1))
         
-        # Награда, если следующий шаг будет по лучу с наибольшей длиной
-        best_way_reward = 1 if abs(heading_angle - max_ray_angle) < np.pi / (2 * agent.rays) else 0
-
+        # Награда за движение в сторону луча с максимальной длиной
+        angle_diff = abs(heading_angle - max_ray_angle)
+        if angle_diff < np.pi / 6:  # Полная награда, если угол меньше 30 градусов
+            best_way_reward = 1
+        elif angle_diff < np.pi / 3:  # Частичная награда, если угол между 30 и 60 градусами
+            best_way_reward = 0.5
+        else:
+            best_way_reward = 0
 
         # Награда за то, что агент смотрит в сторону движения
         a = np.sin(angle(-state.position, state.heading))
@@ -145,10 +151,13 @@ class SimpleCarWorld(World):
         speeding_penalty = 0 if abs(state.velocity) < self.MAX_SPEED else -self.SPEEDING_PENALTY * abs(state.velocity)
         # Штраф за столкновение
         collision_penalty = - max(abs(state.velocity), 0.1) * int(collision) * self.COLLISION_PENALTY
+        # Награда за отсутствие столкновений
+        collision_reward = 1 if not collision else 0
 
         return heading_reward * self.HEADING_REWARD + heading_penalty * self.WRONG_HEADING_PENALTY + collision_penalty \
             + idle_penalty + speeding_penalty \
             + best_way_reward * self.BEST_WAY_REWARD \
+            + collision_reward * self.COLLISION_REWARD\
             # + speeding_reward * self.SPEEDING_REWARD
 
     def eval_reward(self, state, collision):
